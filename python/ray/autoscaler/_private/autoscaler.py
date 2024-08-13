@@ -589,12 +589,12 @@ class StandardAutoscaler:
         if reason_opt is None:
             raise Exception("reason should be not None.")
         reason: str = reason_opt
-        node_ip = self.provider.internal_ip(node_id)
+        # node_ip = self.provider.internal_ip(node_id)
         # Log, record an event, and add node_id to nodes_to_terminate.
         logger_method(
             "StandardAutoscaler: "
             f"Terminating the node with id {node_id}"
-            f" and ip {node_ip}."
+            f" and ip <REMOVED>."
             f" ({reason})"
         )
         self.event_summarizer.add(
@@ -761,7 +761,26 @@ class StandardAutoscaler:
             failed_nodes = []
             for node_id in completed_nodes:
                 updater = self.updaters[node_id]
+                logger.warning(f"AbhiGarg: {node_id = }: {updater.exitcode}")
+
+                is_failed = False
+                ip = None
+
                 if updater.exitcode == 0:
+                    try:
+                        ip = self.provider.internal_ip(node_id)
+                    except Exception as e:
+                        logger.exception(
+                            f"AbhiGarg: StandardAutoscaler: {node_id}:"
+                            " Failed to get internal IP of node."
+                            " Node may have been terminated after updation."
+                            f"Error: {e}"
+                        )
+                        is_failed = True
+                else:
+                    is_failed = True
+
+                if not is_failed:
                     self.num_successful_updates[node_id] += 1
                     self.prom_metrics.successful_updates.inc()
                     if updater.for_recovery:
@@ -772,7 +791,7 @@ class StandardAutoscaler:
                         )
                     # Mark the node as active to prevent the node recovery
                     # logic immediately trying to restart Ray on the new node.
-                    self.load_metrics.mark_active(self.provider.internal_ip(node_id))
+                    self.load_metrics.mark_active(ip)
                 else:
                     failed_nodes.append(node_id)
                     self.num_failed_updates[node_id] += 1
